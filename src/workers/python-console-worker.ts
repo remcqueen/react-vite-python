@@ -58,7 +58,11 @@ const reactPyModule = {
   getInput: (id: string, prompt: string) => {
     const request = new XMLHttpRequest()
     // Synchronous request to be intercepted by service worker
-    request.open('GET', `/react-py-get-input/?id=${id}&prompt=${prompt}`, false)
+    request.open(
+      'GET',
+      `/react-vite-python-get-input/?id=${id}&prompt=${prompt}`,
+      false
+    )
     request.send(null)
     return request.responseText
   }

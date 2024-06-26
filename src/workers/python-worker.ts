@@ -43,7 +43,11 @@ const reactPyModule = {
   getInput: (id: string, prompt: string) => {
     console.debug('Requesting input:', id, prompt)
     const request = new XMLHttpRequest()
-    request.open('GET', `/react-py-get-input/?id=${id}&prompt=${prompt}`, false)
+    request.open(
+      'GET',
+      `/react-vite-python-get-input/?id=${id}&prompt=${prompt}`,
+      false
+    )
     request.send(null)
     console.debug('Received input response:', request.responseText)
     return request.responseText

@@ -29,7 +29,7 @@ self.addEventListener('message', (event: MessageEvent) => {
 self.addEventListener('fetch', (event: FetchEvent) => {
   const url = new URL(event.request.url)
 
-  if (url.pathname === '/react-py-get-input/') {
+  if (url.pathname === '/react-vite-python-get-input/') {
     const id = url.searchParams.get('id')
     const prompt = url.searchParams.get('prompt')
 
