@@ -39,19 +39,13 @@ if (self.location.hostname !== 'localhost') {
 
 import { expose } from 'comlink'
 
-const pendingInputRequests = new Map()
-
 const reactPyModule = {
   getInput: (id: string, prompt: string) => {
-    return new Promise<string>((resolve) => {
-      const channel = new MessageChannel()
-      channel.port1.onmessage = (event) => {
-        if (event.data.type === 'INPUT_RESPONSE') {
-          resolve(event.data.value)
-        }
-      }
-      self.postMessage({ type: 'GET_INPUT', id, prompt }, [channel.port2])
-    })
+    const request = new XMLHttpRequest()
+    // Synchronous request to be intercepted by service worker
+    request.open('GET', `/react-py-get-input/?id=${id}&prompt=${prompt}`, false)
+    request.send(null)
+    return request.responseText
   }
 }
 
@@ -94,16 +88,16 @@ pyodide_http.patch_all()
     const patchInputCode = `
 import sys, builtins
 import react_py
-import asyncio
-
-async def get_input(prompt=""):
+__prompt_str__ = ""
+def get_input(prompt=""):
+    global __prompt_str__
+    __prompt_str__ = prompt
     print(prompt, end="", flush=True)
-    s = await react_py.getInput("${id}", prompt)
+    s = react_py.getInput("${id}", prompt)
     print(s)
     return s
-
-builtins.input = lambda prompt="": asyncio.get_event_loop().run_until_complete(get_input(prompt))
-sys.stdin.readline = lambda: asyncio.get_event_loop().run_until_complete(get_input())
+builtins.input = get_input
+sys.stdin.readline = lambda: react_py.getInput("${id}", __prompt_str__)
 `
     await self.pyodide.runPythonAsync(patchInputCode)
 
@@ -127,14 +121,3 @@ sys.stdin.readline = lambda: asyncio.get_event_loop().run_until_complete(get_inp
 }
 
 expose(python)
-
-self.addEventListener('message', (event) => {
-  if (event.data.type === 'INPUT_RESPONSE') {
-    const { id, value } = event.data
-    const pendingRequest = pendingInputRequests.get(id)
-    if (pendingRequest) {
-      pendingRequest.resolve(value)
-      pendingInputRequests.delete(id)
-    }
-  }
-})
