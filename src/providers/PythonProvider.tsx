@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useRef, useState, useCallback } from 'react'
+import React, { createContext, useEffect, useState, useCallback } from 'react'
 import { Packages } from '../types/Packages'
 
 const PythonContext = createContext({
@@ -35,8 +35,6 @@ function PythonProvider(props: PythonProviderProps) {
   const [workerAwaitingInputPrompt, setWorkerAwaitingInputPrompt] = useState<Map<string, string>>(new Map())
   const [isAwaitingInput, setIsAwaitingInput] = useState(false)
 
-  const swRef = useRef<ServiceWorker>()
-
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
       console.log("Received message in PythonProvider:", event.data);
@@ -65,17 +63,21 @@ function PythonProvider(props: PythonProviderProps) {
         } catch (error) {
           console.error('ServiceWorker registration failed: ', error)
         }
+      } else {
+        console.error('Service workers are not supported in this browser')
       }
     }
 
-    registerServiceWorker()
+    if (!lazy) {
+      registerServiceWorker()
+    }
 
     return () => {
       if (navigator.serviceWorker) {
         navigator.serviceWorker.removeEventListener('message', messageHandler);
       }
     }
-  }, [])
+  }, [lazy])
 
   const sendInput = useCallback((id: string, value: string): void => {
     console.debug('Sending input:', id, value)
