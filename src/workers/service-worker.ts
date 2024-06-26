@@ -4,71 +4,54 @@
 const REACT_PY_AWAITING_INPUT = 'REACT_PY_AWAITING_INPUT'
 const REACT_PY_INPUT = 'REACT_PY_INPUT'
 
-addEventListener('install', (event) => {
+let pendingInputRequests = new Map()
+
+self.addEventListener('install', (event) => {
   event.waitUntil(self.skipWaiting())
 })
 
-addEventListener('activate', (event) => {
+self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim())
 })
 
-const resolvers = new Map<string, Promise<any>[]>()
-
-addEventListener('message', (event) => {
+self.addEventListener('message', (event) => {
   if (event.data.type === REACT_PY_INPUT) {
-    const resolverArray = resolvers.get(event.data.id)
-    if (!resolverArray || resolverArray.length === 0) {
-      console.error('Error handling input: No resolver')
-      return
+    const { id, value } = event.data
+    const pendingRequest = pendingInputRequests.get(id)
+    if (pendingRequest) {
+      pendingRequest.resolve(new Response(value, { status: 200 }))
+      pendingInputRequests.delete(id)
     }
-
-    const resolver = resolverArray.shift()
-    resolver(new Response(event.data.value, { status: 200 }))
-
-    // Notify all clients that input has been received
-    self.clients.matchAll().then((clients) => {
-      clients.forEach((client) => {
-        if (client.type === 'window') {
-          client.postMessage({
-            type: 'REACT_PY_INPUT_RECEIVED',
-            id: event.data.id
-          })
-        }
-      })
-    })
   }
 })
 
-addEventListener('fetch', (event) => {
+self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
   if (url.pathname === '/react-py-get-input/') {
     const id = url.searchParams.get('id')
     const prompt = url.searchParams.get('prompt')
 
-    event.waitUntil(
-      (async () => {
-        const clients = await self.clients.matchAll()
-        clients.forEach((client) => {
-          if (client.type === 'window') {
-            client.postMessage({
-              type: REACT_PY_AWAITING_INPUT,
-              id,
-              prompt
-            })
-          }
-        })
-      })()
-    )
+    event.respondWith(
+      new Promise((resolve) => {
+        pendingInputRequests.set(id, { resolve })
 
-    const promise = new Promise((r) =>
-      resolvers.set(id, [...(resolvers.get(id) || []), r])
+        self.clients.matchAll().then((clients) => {
+          clients.forEach((client) => {
+            if (client.type === 'window') {
+              client.postMessage({
+                type: REACT_PY_AWAITING_INPUT,
+                id,
+                prompt
+              })
+            }
+          })
+        })
+      })
     )
-    event.respondWith(promise)
   }
 })
 
-// Log any errors
-self.addEventListener('error', function (event) {
+self.addEventListener('error', (event) => {
   console.error('ServiceWorker error:', event.error)
 })

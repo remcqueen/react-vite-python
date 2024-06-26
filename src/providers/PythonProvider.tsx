@@ -1,4 +1,4 @@
-import { createContext, useEffect, useRef, useState, useCallback } from 'react'
+import React, { createContext, useEffect, useRef, useState, useCallback } from 'react'
 import { Packages } from '../types/Packages'
 
 const PythonContext = createContext({
@@ -64,21 +64,31 @@ function PythonProvider(props: PythonProviderProps) {
           console.error(`Registration failed with ${error}`)
         }
 
-        navigator.serviceWorker.onmessage = (event) => {
+        const messageHandler = (event: MessageEvent) => {
           if (event.data.type === 'REACT_PY_AWAITING_INPUT') {
-            if (event.source instanceof ServiceWorker) {
-              swRef.current = event.source
-            }
-            setWorkerAwaitingInputIds((prev) => new Set(prev).add(event.data.id))
+            setWorkerAwaitingInputIds((prev) => new Set(prev).add(event.data.id));
             setWorkerAwaitingInputPrompt((prev) => {
-              const next = new Map(prev)
-              next.set(event.data.id, event.data.prompt)
-              return next
-            })
-            setIsAwaitingInput(true)
-            console.debug('Awaiting input for:', event.data.id)
+              const next = new Map(prev);
+              next.set(event.data.id, event.data.prompt);
+              return next;
+            });
+            setIsAwaitingInput(true);
+          } else if (event.data.type === 'GET_INPUT') {
+            const { id, prompt } = event.data;
+            setWorkerAwaitingInputIds((prev) => new Set(prev).add(id));
+            setWorkerAwaitingInputPrompt((prev) => {
+              const next = new Map(prev);
+              next.set(id, prompt);
+              return next;
+            });
+            setIsAwaitingInput(true);
           }
-        }
+        };
+
+        navigator.serviceWorker.addEventListener('message', messageHandler);
+        return () => {
+          navigator.serviceWorker.removeEventListener('message', messageHandler);
+        };
       } else {
         console.error('Service workers not supported')
       }
@@ -92,16 +102,15 @@ function PythonProvider(props: PythonProviderProps) {
       return
     }
 
-    if (!swRef.current) {
-      console.error('No service worker registered')
-      return
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'REACT_PY_INPUT',
+        id,
+        value
+      });
+    } else {
+      console.error('No active service worker');
     }
-
-    swRef.current.postMessage({
-      type: 'REACT_PY_INPUT',
-      id,
-      value
-    })
 
     setWorkerAwaitingInputIds((prev) => {
       const next = new Set(prev)
@@ -114,7 +123,6 @@ function PythonProvider(props: PythonProviderProps) {
       return next
     })
     setIsAwaitingInput(false)
-    console.debug('Input sent for:', id)
   }, [workerAwaitingInputIds])
 
   const contextValue = {
