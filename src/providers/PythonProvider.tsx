@@ -51,22 +51,22 @@ function PythonProvider(props: PythonProviderProps) {
     };
 
     const registerServiceWorker = async () => {
-  if ('serviceWorker' in navigator) {
-    try {
-      const registration = await navigator.serviceWorker.register(
-        '/react-vite-python-service-worker.js',
-        { scope: '/' }
-      );
-      console.debug('ServiceWorker registration successful with scope: ', registration.scope);
-      
-      navigator.serviceWorker.addEventListener('message', messageHandler);
-    } catch (error) {
-      console.error('ServiceWorker registration failed: ', error);
+      if ('serviceWorker' in navigator) {
+        try {
+          const registration = await navigator.serviceWorker.register(
+            '/react-vite-python-service-worker.js',
+            { scope: '/' }
+          )
+          console.debug('ServiceWorker registration successful with scope: ', registration.scope)
+          
+          navigator.serviceWorker.addEventListener('message', messageHandler);
+        } catch (error) {
+          console.error('ServiceWorker registration failed: ', error)
+        }
+      } else {
+        console.error('Service workers are not supported in this browser')
+      }
     }
-  } else {
-    console.error('Service workers are not supported in this browser');
-  }
-};
 
     if (!lazy) {
       registerServiceWorker()
@@ -80,18 +80,34 @@ function PythonProvider(props: PythonProviderProps) {
   }, [lazy])
 
   const sendInput = useCallback((id: string, value: string): void => {
-    console.debug('Sending input:', id, value);
+    console.debug('Sending input:', id, value)
+    if (!workerAwaitingInputIds.has(id)) {
+      console.error('Worker not awaiting input')
+      return
+    }
+
     if (navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
         type: 'REACT_PY_INPUT',
         id,
         value
-      });
+      })
     } else {
-      console.error('No active service worker');
+      console.error('No active service worker')
     }
-    setIsAwaitingInput(false);
-  }, []);
+
+    setWorkerAwaitingInputIds((prev) => {
+      const next = new Set(prev)
+      next.delete(id)
+      return next
+    })
+    setWorkerAwaitingInputPrompt((prev) => {
+      const next = new Map(prev)
+      next.delete(id)
+      return next
+    })
+    setIsAwaitingInput(false)
+  }, [workerAwaitingInputIds])
 
   const contextValue = {
     packages,

@@ -41,15 +41,16 @@ import { expose } from 'comlink'
 
 const reactPyModule = {
   getInput: (id: string, prompt: string) => {
-    return new Promise((resolve) => {
-      self.postMessage({ type: 'REACT_PY_AWAITING_INPUT', id, prompt })
-      self.addEventListener('message', function inputHandler(event) {
-        if (event.data.type === 'REACT_PY_INPUT' && event.data.id === id) {
-          self.removeEventListener('message', inputHandler)
-          resolve(event.data.value)
-        }
-      })
-    })
+    console.debug('Requesting input:', id, prompt)
+    const request = new XMLHttpRequest()
+    request.open(
+      'GET',
+      `/react-vite-python-get-input/?id=${id}&prompt=${prompt}`,
+      false
+    )
+    request.send(null)
+    console.debug('Received input response:', request.responseText)
+    return request.responseText
   }
 }
 
@@ -68,20 +69,18 @@ const python = {
     packages: string[][]
   ) {
     self.pyodide = await self.loadPyodide({
-      stdout: (msg: string) => {
-        console.debug('Python stdout:', msg)
-        stdout(msg)
-      }
+      stdout
     })
+    await self.pyodide.loadPackage(['pyodide-http'])
 
-    await self.pyodide.loadPackage(['pyodide-http', 'micropip'])
-
-    const micropip = self.pyodide.pyimport('micropip')
+    // Load micropip separately
+    await self.pyodide.loadPackage(['micropip'])
 
     if (packages[0].length > 0) {
       await self.pyodide.loadPackage(packages[0])
     }
     if (packages[1].length > 0) {
+      const micropip = self.pyodide.pyimport('micropip')
       await micropip.install(packages[1])
     }
 
@@ -97,20 +96,16 @@ pyodide_http.patch_all()
     const patchInputCode = `
 import sys, builtins
 import react_py
-import asyncio
-
 __prompt_str__ = ""
-
-async def get_input(prompt=""):
+def get_input(prompt=""):
     global __prompt_str__
     __prompt_str__ = prompt
     print(prompt, end="", flush=True)
-    s = await react_py.getInput("${id}", prompt)
+    s = react_py.getInput("${id}", prompt)
     print(s)
     return s
-
-builtins.input = lambda prompt="": asyncio.get_event_loop().run_until_complete(get_input(prompt))
-sys.stdin.readline = lambda: asyncio.get_event_loop().run_until_complete(get_input(__prompt_str__))
+builtins.input = get_input
+sys.stdin.readline = lambda: react_py.getInput("${id}", __prompt_str__)
 `
     await self.pyodide.runPythonAsync(patchInputCode)
 
@@ -119,9 +114,8 @@ sys.stdin.readline = lambda: asyncio.get_event_loop().run_until_complete(get_inp
   async run(code: string) {
     console.debug('Running Python code:', code)
     try {
-      const result = await self.pyodide.runPythonAsync(code)
+      await self.pyodide.runPythonAsync(code)
       console.debug('Python code execution completed')
-      return result
     } catch (error) {
       console.error('Error running Python code:', error)
       throw error
