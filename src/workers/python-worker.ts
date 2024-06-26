@@ -68,11 +68,14 @@ const python = {
       stdout
     })
     await self.pyodide.loadPackage(['pyodide-http'])
+
+    // Load micropip separately
+    await self.pyodide.loadPackage(['micropip'])
+
     if (packages[0].length > 0) {
       await self.pyodide.loadPackage(packages[0])
     }
     if (packages[1].length > 0) {
-      await self.pyodide.loadPackage(['micropip'])
       const micropip = self.pyodide.pyimport('micropip')
       await micropip.install(packages[1])
     }

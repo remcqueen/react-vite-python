@@ -4,17 +4,17 @@
 const REACT_PY_AWAITING_INPUT = 'REACT_PY_AWAITING_INPUT'
 const REACT_PY_INPUT = 'REACT_PY_INPUT'
 
-self.addEventListener('install', (event) => {
+self.addEventListener('install', (event: ExtendableEvent) => {
   event.waitUntil(self.skipWaiting())
 })
 
-self.addEventListener('activate', (event) => {
+self.addEventListener('activate', (event: ExtendableEvent) => {
   event.waitUntil(self.clients.claim())
 })
 
 const resolvers = new Map()
 
-self.addEventListener('message', (event) => {
+self.addEventListener('message', (event: MessageEvent) => {
   if (event.data.type === REACT_PY_INPUT) {
     const resolver = resolvers.get(event.data.id)
     if (resolver) {
@@ -26,7 +26,7 @@ self.addEventListener('message', (event) => {
   }
 })
 
-self.addEventListener('fetch', (event) => {
+self.addEventListener('fetch', (event: FetchEvent) => {
   const url = new URL(event.request.url)
 
   if (url.pathname === '/react-py-get-input/') {
@@ -53,6 +53,6 @@ self.addEventListener('fetch', (event) => {
   }
 })
 
-self.addEventListener('error', (event) => {
+self.addEventListener('error', (event: ErrorEvent) => {
   console.error('ServiceWorker error:', event.error)
 })

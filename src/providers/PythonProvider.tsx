@@ -38,54 +38,40 @@ function PythonProvider(props: PythonProviderProps) {
   const swRef = useRef<ServiceWorker>()
 
   useEffect(() => {
+    const messageHandler = (event: MessageEvent) => {
+      if (event.data.type === 'REACT_PY_AWAITING_INPUT') {
+        console.debug('Received REACT_PY_AWAITING_INPUT message:', event.data)
+        setWorkerAwaitingInputIds((prev) => new Set(prev).add(event.data.id))
+        setWorkerAwaitingInputPrompt((prev) => {
+          const next = new Map(prev)
+          next.set(event.data.id, event.data.prompt)
+          return next
+        })
+        setIsAwaitingInput(true)
+      }
+    }
+
     const registerServiceWorker = async () => {
       if ('serviceWorker' in navigator) {
         try {
-          const url = new URL('../workers/service-worker', import.meta.url)
-          const registration = await navigator.serviceWorker.register(url)
-          if (registration.active) {
-            console.debug('Service worker active')
-            swRef.current = registration.active
-          }
-
-          registration.addEventListener('updatefound', () => {
-            const installingWorker = registration.installing
-            if (installingWorker) {
-              console.debug('Installing new service worker')
-              installingWorker.addEventListener('statechange', () => {
-                if (installingWorker.state === 'installed') {
-                  console.debug('New service worker installed')
-                  swRef.current = installingWorker
-                }
-              })
-            }
-          })
+          const registration = await navigator.serviceWorker.register(
+            '/react-py-service-worker.js',
+            { scope: '/' }
+          )
+          console.debug('ServiceWorker registration successful with scope: ', registration.scope)
+          
+          navigator.serviceWorker.addEventListener('message', messageHandler)
         } catch (error) {
-          console.error(`Registration failed with ${error}`)
+          console.error('ServiceWorker registration failed: ', error)
         }
-
-        navigator.serviceWorker.addEventListener('message', (event) => {
-          if (event.data.type === 'REACT_PY_AWAITING_INPUT') {
-            console.debug('Received REACT_PY_AWAITING_INPUT message:', event.data)
-            setWorkerAwaitingInputIds((prev) => new Set(prev).add(event.data.id))
-            setWorkerAwaitingInputPrompt((prev) => {
-              const next = new Map(prev)
-              next.set(event.data.id, event.data.prompt)
-              return next
-            })
-            setIsAwaitingInput(true)
-          }
-        })
-      } else {
-        console.error('Service workers not supported')
       }
     }
+
     registerServiceWorker()
 
-    // Cleanup function
     return () => {
       if (navigator.serviceWorker) {
-        navigator.serviceWorker.removeEventListener('message', () => {})
+        navigator.serviceWorker.removeEventListener('message', messageHandler)
       }
     }
   }, [])
