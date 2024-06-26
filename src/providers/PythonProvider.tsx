@@ -54,8 +54,8 @@ function PythonProvider(props: PythonProviderProps) {
   if ('serviceWorker' in navigator) {
     try {
       const registration = await navigator.serviceWorker.register(
-        new URL('../workers/service-worker.ts', import.meta.url),
-        { type: 'module' }
+        '/react-vite-python-service-worker.js',
+        { scope: '/' }
       );
       console.debug('ServiceWorker registration successful with scope: ', registration.scope);
       

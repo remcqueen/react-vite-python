@@ -70,19 +70,18 @@ const python = {
     self.pyodide = await self.loadPyodide({
       stdout: (msg: string) => {
         console.debug('Python stdout:', msg)
-        stdout(msg) // This will update the output in the React component
+        stdout(msg)
       }
     })
-    await self.pyodide.loadPackage(['pyodide-http'])
 
-    // Load micropip separately
-    await self.pyodide.loadPackage(['micropip'])
+    await self.pyodide.loadPackage(['pyodide-http', 'micropip'])
+
+    const micropip = self.pyodide.pyimport('micropip')
 
     if (packages[0].length > 0) {
       await self.pyodide.loadPackage(packages[0])
     }
     if (packages[1].length > 0) {
-      const micropip = self.pyodide.pyimport('micropip')
       await micropip.install(packages[1])
     }
 
