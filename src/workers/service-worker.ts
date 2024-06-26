@@ -1,27 +1,41 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 
-addEventListener('install', () => {
-  self.skipWaiting()
+const REACT_PY_AWAITING_INPUT = 'REACT_PY_AWAITING_INPUT'
+const REACT_PY_INPUT = 'REACT_PY_INPUT'
+
+addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting())
 })
 
-addEventListener('activate', () => {
-  self.clients.claim()
+addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
 })
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 const resolvers = new Map<string, Promise<any>[]>()
 
 addEventListener('message', (event) => {
-  if (event.data.type === 'REACT_PY_INPUT') {
+  if (event.data.type === REACT_PY_INPUT) {
     const resolverArray = resolvers.get(event.data.id)
     if (!resolverArray || resolverArray.length === 0) {
-      console.error('Error handing input: No resolver')
+      console.error('Error handling input: No resolver')
       return
     }
 
-    const resolver = resolverArray.shift() // Take the first promise in the array
+    const resolver = resolverArray.shift()
     resolver(new Response(event.data.value, { status: 200 }))
+
+    // Notify all clients that input has been received
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        if (client.type === 'window') {
+          client.postMessage({
+            type: 'REACT_PY_INPUT_RECEIVED',
+            id: event.data.id
+          })
+        }
+      })
+    })
   }
 })
 
@@ -34,28 +48,16 @@ addEventListener('fetch', (event) => {
 
     event.waitUntil(
       (async () => {
-        // Send REACT_PY_AWAITING_INPUT message to all window clients
-        self.clients.matchAll().then((clients) => {
-          clients.forEach((client) => {
-            if (client.type === 'window') {
-              client.postMessage({
-                type: 'REACT_PY_AWAITING_INPUT',
-                id,
-                prompt
-              })
-            }
-          })
+        const clients = await self.clients.matchAll()
+        clients.forEach((client) => {
+          if (client.type === 'window') {
+            client.postMessage({
+              type: REACT_PY_AWAITING_INPUT,
+              id,
+              prompt
+            })
+          }
         })
-
-        // Does not match the window in Safari
-        // This is likely due to the request originating from a web worker
-        // if (!event.clientId) return
-        // const client = await clients.get(event.clientId)
-        // if (!client) return
-        // client.postMessage({
-        //   type: 'REACT_PY_AWAITING_INPUT',
-        //   id
-        // })
       })()
     )
 
@@ -64,4 +66,9 @@ addEventListener('fetch', (event) => {
     )
     event.respondWith(promise)
   }
+})
+
+// Log any errors
+self.addEventListener('error', function (event) {
+  console.error('ServiceWorker error:', event.error)
 })

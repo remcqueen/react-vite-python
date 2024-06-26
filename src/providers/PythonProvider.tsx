@@ -1,4 +1,4 @@
-import { createContext, useEffect, useRef, useState } from 'react'
+import { createContext, useEffect, useRef, useState, useCallback } from 'react'
 import { Packages } from '../types/Packages'
 
 const PythonContext = createContext({
@@ -6,11 +6,10 @@ const PythonContext = createContext({
   timeout: 0,
   lazy: false,
   terminateOnCompletion: false,
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars, @typescript-eslint/no-empty-function
   sendInput: (_id: string, _value: string) => {},
   workerAwaitingInputIds: [] as string[],
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars
-  getPrompt: (_id: string) => undefined as string | undefined
+  getPrompt: (_id: string) => undefined as string | undefined,
+  isAwaitingInput: false,
 })
 
 export const suppressedMessages = ['Python initialization complete']
@@ -20,8 +19,7 @@ interface PythonProviderProps {
   timeout?: number
   lazy?: boolean
   terminateOnCompletion?: boolean
-  // eslint-disable-next-line
-  children: any
+  children: React.ReactNode
 }
 
 function PythonProvider(props: PythonProviderProps) {
@@ -29,15 +27,13 @@ function PythonProvider(props: PythonProviderProps) {
     packages = {},
     timeout = 0,
     lazy = false,
-    terminateOnCompletion = false
+    terminateOnCompletion = false,
+    children
   } = props
 
-  const [workerAwaitingInputIds, setWorkerAwaitingInputIds] = useState<
-    Set<string>
-  >(new Set())
-  const [workerAwaitingInputPrompt, setWorkerAwaitingInputPrompt] = useState<
-    Map<string, string>
-  >(new Map())
+  const [workerAwaitingInputIds, setWorkerAwaitingInputIds] = useState<Set<string>>(new Set())
+  const [workerAwaitingInputPrompt, setWorkerAwaitingInputPrompt] = useState<Map<string, string>>(new Map())
+  const [isAwaitingInput, setIsAwaitingInput] = useState(false)
 
   const swRef = useRef<ServiceWorker>()
 
@@ -71,17 +67,16 @@ function PythonProvider(props: PythonProviderProps) {
         navigator.serviceWorker.onmessage = (event) => {
           if (event.data.type === 'REACT_PY_AWAITING_INPUT') {
             if (event.source instanceof ServiceWorker) {
-              // Update the service worker reference, in case the service worker is different to the one we registered
               swRef.current = event.source
             }
-            setWorkerAwaitingInputIds((prev) =>
-              new Set(prev).add(event.data.id)
-            )
+            setWorkerAwaitingInputIds((prev) => new Set(prev).add(event.data.id))
             setWorkerAwaitingInputPrompt((prev) => {
               const next = new Map(prev)
               next.set(event.data.id, event.data.prompt)
               return next
             })
+            setIsAwaitingInput(true)
+            console.debug('Awaiting input for:', event.data.id)
           }
         }
       } else {
@@ -91,7 +86,7 @@ function PythonProvider(props: PythonProviderProps) {
     registerServiceWorker()
   }, [])
 
-  const sendInput = (id: string, value: string): void => {
+  const sendInput = useCallback((id: string, value: string): void => {
     if (!workerAwaitingInputIds.has(id)) {
       console.error('Worker not awaiting input')
       return
@@ -118,21 +113,25 @@ function PythonProvider(props: PythonProviderProps) {
       next.delete(id)
       return next
     })
+    setIsAwaitingInput(false)
+    console.debug('Input sent for:', id)
+  }, [workerAwaitingInputIds])
+
+  const contextValue = {
+    packages,
+    timeout,
+    lazy,
+    terminateOnCompletion,
+    sendInput,
+    workerAwaitingInputIds: Array.from(workerAwaitingInputIds),
+    getPrompt: (id: string) => workerAwaitingInputPrompt.get(id),
+    isAwaitingInput,
   }
 
   return (
-    <PythonContext.Provider
-      value={{
-        packages,
-        timeout,
-        lazy,
-        terminateOnCompletion,
-        sendInput,
-        workerAwaitingInputIds: Array.from(workerAwaitingInputIds),
-        getPrompt: (id: string) => workerAwaitingInputPrompt.get(id)
-      }}
-      {...props}
-    />
+    <PythonContext.Provider value={contextValue}>
+      {children}
+    </PythonContext.Provider>
   )
 }
 

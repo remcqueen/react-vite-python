@@ -36,7 +36,8 @@ export default function usePython(props?: UsePythonProps) {
     terminateOnCompletion,
     sendInput,
     workerAwaitingInputIds,
-    getPrompt
+    getPrompt,
+    isAwaitingInput
   } = useContext(PythonContext)
 
   const workerRef = useRef<Worker>()
@@ -52,24 +53,23 @@ export default function usePython(props?: UsePythonProps) {
     watchedModules
   } = useFilesystem({ runner: runnerRef?.current })
 
-  const createWorker = () => {
+  const createWorker = useCallback(() => {
     const worker = new Worker(
       new URL('../workers/python-worker', import.meta.url)
     )
     workerRef.current = worker
-  }
+    console.debug('Worker created')
+  }, [])
 
   useEffect(() => {
     if (!lazy) {
-      // Spawn worker on mount
       createWorker()
     }
 
-    // Cleanup worker on unmount
     return () => {
       cleanup()
     }
-  }, [])
+  }, [lazy, createWorker])
 
   const allPackages = useMemo(() => {
     const official = [
@@ -99,11 +99,9 @@ export default function usePython(props?: UsePythonProps) {
 
           await runner.init(
             proxy((msg: string) => {
-              // Suppress messages that are not useful for the user
-              if (suppressedMessages.includes(msg)) {
-                return
+              if (!suppressedMessages.includes(msg)) {
+                setOutput((prev) => [...prev, msg])
               }
-              setOutput((prev) => [...prev, msg])
             }),
             proxy(({ id, version }) => {
               setRunnerId(id)
@@ -119,16 +117,14 @@ export default function usePython(props?: UsePythonProps) {
       }
       init()
     }
-  }, [workerRef.current])
+  }, [workerRef.current, isReady, allPackages])
 
-  // Immediately set stdout upon receiving new input
   useEffect(() => {
     if (output.length > 0) {
       setStdout(output.join('\n'))
     }
   }, [output])
 
-  // React to ready state and run delayed code if pending
   useEffect(() => {
     if (pendingCode && isReady) {
       const delayedRun = async () => {
@@ -139,7 +135,6 @@ export default function usePython(props?: UsePythonProps) {
     }
   }, [pendingCode, isReady])
 
-  // React to run completion and run cleanup if worker should terminate on completion
   useEffect(() => {
     if (terminateOnCompletion && hasRun && !isRunning) {
       cleanup()
@@ -167,26 +162,27 @@ def run(code, preamble=''):
         print()
 `
 
-  // prettier-ignore
   const moduleReloadCode = (modules: Set<string>) => `
 import importlib
 import sys
-${Array.from(modules).map((name) => `
+${Array.from(modules)
+  .map(
+    (name) => `
 if """${name}""" in sys.modules:
     importlib.reload(sys.modules["""${name}"""])
-`).join('')}
+`
+  )
+  .join('')}
 del importlib
 del sys
 `
 
   const runPython = useCallback(
     async (code: string, preamble = '') => {
-      // Clear stdout and stderr
       setStdout('')
       setStderr('')
 
       if (lazy && !isReady) {
-        // Spawn worker and set pending code
         createWorker()
         setPendingCode(code)
         return
@@ -203,7 +199,6 @@ del sys
       try {
         setIsRunning(true)
         setHasRun(true)
-        // Clear output
         setOutput([])
         if (!isReady || !runnerRef.current) {
           throw new Error('Pyodide is not loaded yet')
@@ -219,7 +214,6 @@ del sys
           await runnerRef.current.run(moduleReloadCode(watchedModules))
         }
         await runnerRef.current.run(code)
-        // eslint-disable-next-line
       } catch (error: any) {
         setStderr('Traceback (most recent call last):\n' + error.message)
       } finally {
@@ -227,37 +221,35 @@ del sys
         clearTimeout(timeoutTimer)
       }
     },
-    [lazy, isReady, timeout, watchedModules]
+    [lazy, isReady, timeout, watchedModules, createWorker]
   )
 
-  const interruptExecution = () => {
+  const interruptExecution = useCallback(() => {
     cleanup()
     setIsRunning(false)
     setRunnerId(undefined)
     setOutput([])
-
-    // Spawn new worker
     createWorker()
-  }
+  }, [createWorker])
 
-  const cleanup = () => {
+  const cleanup = useCallback(() => {
     if (!workerRef.current) {
       return
     }
     console.debug('Terminating worker')
     workerRef.current.terminate()
-  }
+  }, [])
 
-  const isAwaitingInput =
-    !!runnerId && workerAwaitingInputIds.includes(runnerId)
-
-  const sendUserInput = (value: string) => {
-    if (!runnerId) {
-      console.error('No runner id')
-      return
-    }
-    sendInput(runnerId, value)
-  }
+  const sendUserInput = useCallback(
+    (value: string) => {
+      if (!runnerId) {
+        console.error('No runner id')
+        return
+      }
+      sendInput(runnerId, value)
+    },
+    [runnerId, sendInput]
+  )
 
   return {
     runPython,
