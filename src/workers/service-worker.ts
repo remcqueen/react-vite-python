@@ -25,30 +25,37 @@ self.addEventListener('message', (event: MessageEvent) => {
   }
 })
 
+async function handleInputRequest(request: Request) {
+  const url = new URL(request.url)
+  const id = url.searchParams.get('id')
+  const prompt = url.searchParams.get('prompt')
+
+  if (!id || !prompt) {
+    return new Response('Invalid request', { status: 400 })
+  }
+
+  return new Promise((resolve) => {
+    resolvers.set(id, resolve)
+
+    self.clients.matchAll().then((clients) => {
+      clients.forEach((client) => {
+        if (client.type === 'window') {
+          client.postMessage({
+            type: REACT_VITE_PYTHON_AWAITING_INPUT,
+            id,
+            prompt
+          })
+        }
+      })
+    })
+  })
+}
+
 self.addEventListener('fetch', (event: FetchEvent) => {
   const url = new URL(event.request.url)
 
   if (url.pathname === '/react-vite-python-get-input/') {
-    const id = url.searchParams.get('id')
-    const prompt = url.searchParams.get('prompt')
-
-    event.respondWith(
-      new Promise((resolve) => {
-        resolvers.set(id, resolve)
-
-        self.clients.matchAll().then((clients) => {
-          clients.forEach((client) => {
-            if (client.type === 'window') {
-              client.postMessage({
-                type: REACT_VITE_PYTHON_AWAITING_INPUT,
-                id,
-                prompt
-              })
-            }
-          })
-        })
-      })
-    )
+    event.respondWith(handleInputRequest(event.request))
   }
 })
 

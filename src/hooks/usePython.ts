@@ -36,8 +36,8 @@ export default function usePython(props?: UsePythonProps) {
     terminateOnCompletion,
     sendInput,
     workerAwaitingInputIds,
-    getPrompt,
-    isAwaitingInput
+    getPrompt
+    // isAwaitingInput
   } = useContext(PythonContext)
 
   const workerRef = useRef<Worker>()
@@ -251,6 +251,10 @@ del sys
     [runnerId, sendInput]
   )
 
+  const isAwaitingInput = useCallback(() => {
+    return !!runnerId && workerAwaitingInputIds.includes(runnerId)
+  }, [runnerId, workerAwaitingInputIds])
+
   return {
     runPython,
     stdout,
@@ -265,7 +269,7 @@ del sys
     rmdir,
     watchModules,
     unwatchModules,
-    isAwaitingInput,
+    isAwaitingInput: isAwaitingInput(),
     sendInput: sendUserInput,
     prompt: runnerId ? getPrompt(runnerId) : ''
   }

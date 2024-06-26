@@ -39,17 +39,17 @@ function PythonProvider(props: PythonProviderProps) {
 
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
-      if (event.data.type === 'REACT_VITE_PYTHON_AWAITING_INPUT') {
-        console.debug('Received REACT_VITE_PYTHON_AWAITING_INPUT message:', event.data)
-        setWorkerAwaitingInputIds((prev) => new Set(prev).add(event.data.id))
-        setWorkerAwaitingInputPrompt((prev) => {
-          const next = new Map(prev)
-          next.set(event.data.id, event.data.prompt)
-          return next
-        })
-        setIsAwaitingInput(true)
-      }
+    if (event.data.type === 'REACT_VITE_PYTHON_AWAITING_INPUT') {
+      console.debug('Received REACT_VITE_PYTHON_AWAITING_INPUT message:', event.data);
+      setWorkerAwaitingInputIds((prev) => new Set(prev).add(event.data.id));
+      setWorkerAwaitingInputPrompt((prev) => {
+        const next = new Map(prev);
+        next.set(event.data.id, event.data.prompt);
+        return next;
+      });
+      setIsAwaitingInput(true);
     }
+  };
 
     const registerServiceWorker = async () => {
       if ('serviceWorker' in navigator) {
