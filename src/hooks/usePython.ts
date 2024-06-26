@@ -176,16 +176,9 @@ if """${name}""" in sys.modules:
 del importlib
 del sys
 `
-  const interruptExecution = useCallback(() => {
-    cleanup()
-    setIsRunning(false)
-    setRunnerId(undefined)
-    setOutput([])
-    createWorker()
-  }, [createWorker])
 
   const runPython = useCallback(
-    async (code: string) => {
+    async (code: string, preamble = '') => {
       setStdout('')
       setStderr('')
 
@@ -195,17 +188,24 @@ del sys
         return
       }
 
+      code = `${pythonRunnerCode}\n\nrun(${JSON.stringify(
+        code
+      )}, ${JSON.stringify(preamble)})`
+
       if (!isReady) {
         throw new Error('Pyodide is not loaded yet')
       }
       let timeoutTimer
       try {
         setIsRunning(true)
+        setHasRun(true)
+        setOutput([])
         if (!isReady || !runnerRef.current) {
           throw new Error('Pyodide is not loaded yet')
         }
         if (timeout > 0) {
           timeoutTimer = setTimeout(() => {
+            setStdout('')
             setStderr(`Execution timed out. Reached limit of ${timeout} ms.`)
             interruptExecution()
           }, timeout)
@@ -214,7 +214,6 @@ del sys
           await runnerRef.current.run(moduleReloadCode(watchedModules))
         }
         await runnerRef.current.run(code)
-        // The output will be captured by the stdout callback set during initialization
       } catch (error: any) {
         setStderr('Traceback (most recent call last):\n' + error.message)
       } finally {
@@ -222,8 +221,16 @@ del sys
         clearTimeout(timeoutTimer)
       }
     },
-    [lazy, isReady, timeout, watchedModules, createWorker, interruptExecution]
+    [lazy, isReady, timeout, watchedModules, createWorker]
   )
+
+  const interruptExecution = useCallback(() => {
+    cleanup()
+    setIsRunning(false)
+    setRunnerId(undefined)
+    setOutput([])
+    createWorker()
+  }, [createWorker])
 
   const cleanup = useCallback(() => {
     if (!workerRef.current) {

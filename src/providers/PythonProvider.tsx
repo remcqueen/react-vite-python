@@ -1,4 +1,4 @@
-import React, { createContext, useEffect, useState, useCallback } from 'react'
+import React, { createContext, useEffect, useRef, useState, useCallback } from 'react'
 import { Packages } from '../types/Packages'
 
 const PythonContext = createContext({
@@ -35,20 +35,21 @@ function PythonProvider(props: PythonProviderProps) {
   const [workerAwaitingInputPrompt, setWorkerAwaitingInputPrompt] = useState<Map<string, string>>(new Map())
   const [isAwaitingInput, setIsAwaitingInput] = useState(false)
 
+  const swRef = useRef<ServiceWorker>()
+
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
-      console.log("Received message in PythonProvider:", event.data);
-      if (event.data.type === 'REACT_PY_AWAITING_INPUT') {
-        console.log("Setting isAwaitingInput to true");
-        setIsAwaitingInput(true);
+      if (event.data.type === 'REACT_VITE_PYTHON_AWAITING_INPUT') {
+        console.debug('Received REACT_VITE_PYTHON_AWAITING_INPUT message:', event.data)
         setWorkerAwaitingInputIds((prev) => new Set(prev).add(event.data.id))
         setWorkerAwaitingInputPrompt((prev) => {
           const next = new Map(prev)
           next.set(event.data.id, event.data.prompt)
           return next
         })
+        setIsAwaitingInput(true)
       }
-    };
+    }
 
     const registerServiceWorker = async () => {
       if ('serviceWorker' in navigator) {
@@ -59,25 +60,21 @@ function PythonProvider(props: PythonProviderProps) {
           )
           console.debug('ServiceWorker registration successful with scope: ', registration.scope)
           
-          navigator.serviceWorker.addEventListener('message', messageHandler);
+          navigator.serviceWorker.addEventListener('message', messageHandler)
         } catch (error) {
           console.error('ServiceWorker registration failed: ', error)
         }
-      } else {
-        console.error('Service workers are not supported in this browser')
       }
     }
 
-    if (!lazy) {
-      registerServiceWorker()
-    }
+    registerServiceWorker()
 
     return () => {
       if (navigator.serviceWorker) {
-        navigator.serviceWorker.removeEventListener('message', messageHandler);
+        navigator.serviceWorker.removeEventListener('message', messageHandler)
       }
     }
-  }, [lazy])
+  }, [])
 
   const sendInput = useCallback((id: string, value: string): void => {
     console.debug('Sending input:', id, value)
@@ -88,7 +85,7 @@ function PythonProvider(props: PythonProviderProps) {
 
     if (navigator.serviceWorker.controller) {
       navigator.serviceWorker.controller.postMessage({
-        type: 'REACT_PY_INPUT',
+        type: 'REACT_VITE_PYTHON_INPUT',
         id,
         value
       })

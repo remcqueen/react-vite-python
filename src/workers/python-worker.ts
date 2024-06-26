@@ -87,7 +87,7 @@ const python = {
     const id = self.crypto.randomUUID()
     const version = self.pyodide.version
 
-    self.pyodide.registerJsModule('react_py', reactPyModule)
+    self.pyodide.registerJsModule('react_vite_python', reactPyModule)
     const initCode = `
 import pyodide_http
 pyodide_http.patch_all()
@@ -95,17 +95,17 @@ pyodide_http.patch_all()
     await self.pyodide.runPythonAsync(initCode)
     const patchInputCode = `
 import sys, builtins
-import react_py
+import react_vite_python
 __prompt_str__ = ""
 def get_input(prompt=""):
     global __prompt_str__
     __prompt_str__ = prompt
     print(prompt, end="", flush=True)
-    s = react_py.getInput("${id}", prompt)
+    s = react_vite_python.getInput("${id}", prompt)
     print(s)
     return s
 builtins.input = get_input
-sys.stdin.readline = lambda: react_py.getInput("${id}", __prompt_str__)
+sys.stdin.readline = lambda: react_vite_python.getInput("${id}", __prompt_str__)
 `
     await self.pyodide.runPythonAsync(patchInputCode)
 
