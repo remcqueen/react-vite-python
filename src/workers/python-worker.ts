@@ -41,16 +41,14 @@ import { expose } from 'comlink'
 
 const reactPyModule = {
   getInput: (id: string, prompt: string) => {
-    console.debug('Requesting input:', id, prompt)
     return new Promise((resolve) => {
-      const channel = new MessageChannel()
-      channel.port1.onmessage = (event) => {
-        if (event.data && event.data.type === 'INPUT_RESPONSE') {
-          console.debug('Received input response:', event.data.value)
+      self.postMessage({ type: 'REACT_PY_AWAITING_INPUT', id, prompt })
+      self.addEventListener('message', function inputHandler(event) {
+        if (event.data.type === 'REACT_PY_INPUT' && event.data.id === id) {
+          self.removeEventListener('message', inputHandler)
           resolve(event.data.value)
         }
-      }
-      self.postMessage({ type: 'GET_INPUT', id, prompt }, [channel.port2])
+      })
     })
   }
 }
@@ -70,7 +68,10 @@ const python = {
     packages: string[][]
   ) {
     self.pyodide = await self.loadPyodide({
-      stdout
+      stdout: (msg: string) => {
+        console.debug('Python stdout:', msg)
+        stdout(msg) // This will update the output in the React component
+      }
     })
     await self.pyodide.loadPackage(['pyodide-http'])
 
@@ -119,8 +120,9 @@ sys.stdin.readline = lambda: asyncio.get_event_loop().run_until_complete(get_inp
   async run(code: string) {
     console.debug('Running Python code:', code)
     try {
-      await self.pyodide.runPythonAsync(code)
+      const result = await self.pyodide.runPythonAsync(code)
       console.debug('Python code execution completed')
+      return result
     } catch (error) {
       console.error('Error running Python code:', error)
       throw error
