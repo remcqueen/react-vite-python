@@ -28,15 +28,16 @@ export default function usePython(props?: UsePythonProps) {
   const [stderr, setStderr] = useState('')
   const [pendingCode, setPendingCode] = useState<string | undefined>()
   const [hasRun, setHasRun] = useState(false)
+  const [isAwaitingInput, setIsAwaitingInput] = useState(false)
 
   const {
     packages: globalPackages,
     timeout,
     lazy,
     terminateOnCompletion,
-    sendInput,
-    workerAwaitingInputIds,
-    getPrompt
+    // sendInput,
+    // workerAwaitingInputIds,
+    // getPrompt
     // isAwaitingInput
   } = useContext(PythonContext)
 
@@ -58,6 +59,13 @@ export default function usePython(props?: UsePythonProps) {
       new URL('../workers/python-worker', import.meta.url)
     )
     workerRef.current = worker
+    worker.onmessage = (event) => {
+      if (event.data.type === 'INPUT_REQUEST') {
+        setIsAwaitingInput(true)
+        setRunnerId(event.data.id)
+        setStdout((prev) => prev + event.data.prompt)
+      }
+    }
     console.debug('Worker created')
   }, [])
 
@@ -246,16 +254,23 @@ del sys
         console.error('No runner id')
         return
       }
-      sendInput(runnerId, value)
+      if (workerRef.current) {
+        workerRef.current.postMessage({
+          type: 'INPUT_RESPONSE',
+          id: runnerId,
+          value
+        })
+        setIsAwaitingInput(false)
+      }
     },
-    [runnerId, sendInput]
+    [runnerId]
   )
 
-  const isAwaitingInput = useCallback(() => {
-    return !!runnerId && workerAwaitingInputIds.includes(runnerId)
-  }, [runnerId, workerAwaitingInputIds])
+  // const isAwaitingInput = useCallback(() => {
+  //   return !!runnerId && workerAwaitingInputIds.includes(runnerId)
+  // }, [runnerId, workerAwaitingInputIds])
 
-  return {
+   return {
     runPython,
     stdout,
     stderr,
@@ -269,8 +284,8 @@ del sys
     rmdir,
     watchModules,
     unwatchModules,
-    isAwaitingInput: isAwaitingInput(),
+    isAwaitingInput,
     sendInput: sendUserInput,
-    prompt: runnerId ? getPrompt(runnerId) : ''
+    prompt: stdout // Use stdout as the prompt
   }
 }

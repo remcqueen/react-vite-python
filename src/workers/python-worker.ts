@@ -42,15 +42,15 @@ import { expose } from 'comlink'
 const reactPyModule = {
   getInput: (id: string, prompt: string) => {
     console.debug('Requesting input:', id, prompt)
-    const request = new XMLHttpRequest()
-    request.open(
-      'GET',
-      `/react-vite-python-get-input/?id=${id}&prompt=${prompt}`,
-      false
-    )
-    request.send(null)
-    console.debug('Received input response:', request.responseText)
-    return request.responseText
+    return new Promise((resolve) => {
+      self.postMessage({ type: 'INPUT_REQUEST', id, prompt })
+      self.addEventListener('message', function inputListener(event) {
+        if (event.data.type === 'INPUT_RESPONSE' && event.data.id === id) {
+          self.removeEventListener('message', inputListener)
+          resolve(event.data.value)
+        }
+      })
+    })
   }
 }
 
@@ -102,16 +102,20 @@ const python = {
     const patchInputCode = `
 import sys, builtins
 import react_vite_python
+import asyncio
+
 __prompt_str__ = ""
-def get_input(prompt=""):
+
+async def get_input(prompt=""):
     global __prompt_str__
     __prompt_str__ = prompt
     print(prompt, end="", flush=True)
-    s = react_vite_python.getInput("${id}", prompt)
+    s = await react_vite_python.getInput("${id}", prompt)
     print(s)
     return s
-builtins.input = get_input
-sys.stdin.readline = lambda: react_vite_python.getInput("${id}", __prompt_str__)
+
+builtins.input = lambda prompt="": asyncio.get_event_loop().run_until_complete(get_input(prompt))
+sys.stdin.readline = lambda: asyncio.get_event_loop().run_until_complete(get_input(__prompt_str__))
   `
     await self.pyodide.runPythonAsync(patchInputCode)
 
