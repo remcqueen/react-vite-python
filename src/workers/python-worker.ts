@@ -40,17 +40,19 @@ if (self.location.hostname !== 'localhost') {
 import { expose } from 'comlink'
 
 const reactPyModule = {
-  getInput: async (id: string, prompt: string) => {
+  getInput: (id: string, prompt: string) => {
     console.debug('Requesting input:', id, prompt)
-    const response = await fetch(
-      `/react-vite-python-get-input/?id=${id}&prompt=${prompt}`
+    const request = new XMLHttpRequest()
+    request.open(
+      'GET',
+      `/react-vite-python-get-input/?id=${id}&prompt=${prompt}`,
+      false
     )
-    const input = await response.text()
-    console.debug('Received input response:', input)
-    return input
+    request.send(null)
+    console.debug('Received input response:', request.responseText)
+    return request.responseText
   }
 }
-
 
 const python = {
   async init(
