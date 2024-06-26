@@ -71,20 +71,26 @@ const python = {
     self.pyodide = await self.loadPyodide({
       stdout
     })
-    await self.pyodide.loadPackage(['pyodide-http'])
 
-    // Load micropip separately and ensure it's installed
-    await self.pyodide.loadPackage(['micropip'])
+    // Load required packages
+    await self.pyodide.loadPackage(['pyodide-http', 'micropip'])
+
+    // Initialize pyodide-http
     await self.pyodide.runPythonAsync(`
-    import micropip
-    await micropip.install('micropip')
+    import pyodide_http
+    pyodide_http.patch_all()
   `)
 
+    // Initialize micropip
+    const micropip = self.pyodide.pyimport('micropip')
+
+    // Load official packages
     if (packages[0].length > 0) {
       await self.pyodide.loadPackage(packages[0])
     }
+
+    // Load micropip packages
     if (packages[1].length > 0) {
-      const micropip = self.pyodide.pyimport('micropip')
       await micropip.install(packages[1])
     }
 
@@ -92,11 +98,7 @@ const python = {
     const version = self.pyodide.version
 
     self.pyodide.registerJsModule('react_vite_python', reactPyModule)
-    const initCode = `
-import pyodide_http
-pyodide_http.patch_all()
-`
-    await self.pyodide.runPythonAsync(initCode)
+
     const patchInputCode = `
 import sys, builtins
 import react_vite_python
@@ -110,7 +112,7 @@ def get_input(prompt=""):
     return s
 builtins.input = get_input
 sys.stdin.readline = lambda: react_vite_python.getInput("${id}", __prompt_str__)
-`
+  `
     await self.pyodide.runPythonAsync(patchInputCode)
 
     onLoad({ id, version })
