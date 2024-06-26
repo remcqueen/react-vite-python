@@ -39,17 +39,18 @@ function PythonProvider(props: PythonProviderProps) {
 
   useEffect(() => {
     const messageHandler = (event: MessageEvent) => {
+      console.log("Received message in PythonProvider:", event.data);
       if (event.data.type === 'REACT_PY_AWAITING_INPUT') {
-        console.debug('Received REACT_PY_AWAITING_INPUT message:', event.data)
+        console.log("Setting isAwaitingInput to true");
+        setIsAwaitingInput(true);
         setWorkerAwaitingInputIds((prev) => new Set(prev).add(event.data.id))
         setWorkerAwaitingInputPrompt((prev) => {
           const next = new Map(prev)
           next.set(event.data.id, event.data.prompt)
           return next
         })
-        setIsAwaitingInput(true)
       }
-    }
+    };
 
     const registerServiceWorker = async () => {
       if ('serviceWorker' in navigator) {
@@ -60,7 +61,7 @@ function PythonProvider(props: PythonProviderProps) {
           )
           console.debug('ServiceWorker registration successful with scope: ', registration.scope)
           
-          navigator.serviceWorker.addEventListener('message', messageHandler)
+          navigator.serviceWorker.addEventListener('message', messageHandler);
         } catch (error) {
           console.error('ServiceWorker registration failed: ', error)
         }
@@ -71,7 +72,7 @@ function PythonProvider(props: PythonProviderProps) {
 
     return () => {
       if (navigator.serviceWorker) {
-        navigator.serviceWorker.removeEventListener('message', messageHandler)
+        navigator.serviceWorker.removeEventListener('message', messageHandler);
       }
     }
   }, [])
