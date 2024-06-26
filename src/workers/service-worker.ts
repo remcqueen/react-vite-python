@@ -1,58 +1,58 @@
 // eslint-disable-next-line @typescript-eslint/ban-ts-comment
 // @ts-nocheck
 
-addEventListener('install', () => {
-  self.skipWaiting()
+const REACT_PY_AWAITING_INPUT = 'REACT_PY_AWAITING_INPUT'
+const REACT_PY_INPUT = 'REACT_PY_INPUT'
+
+self.addEventListener('install', (event) => {
+  event.waitUntil(self.skipWaiting())
 })
 
-addEventListener('activate', () => {
-  self.clients.claim()
+self.addEventListener('activate', (event) => {
+  event.waitUntil(self.clients.claim())
 })
 
-const resolvers = new Map<string, Promise<any>[]>()
+const resolvers = new Map()
 
-addEventListener('message', (event) => {
-  if (event.data.type === 'REACT_PY_INPUT') {
-    const resolverArray = resolvers.get(event.data.id)
-    if (!resolverArray || resolverArray.length === 0) {
-      console.error('Error handling input: No resolver')
-      return
+self.addEventListener('message', (event) => {
+  if (event.data.type === REACT_PY_INPUT) {
+    const resolver = resolvers.get(event.data.id)
+    if (resolver) {
+      resolver(new Response(event.data.value, { status: 200 }))
+      resolvers.delete(event.data.id)
+    } else {
+      console.error('No resolver found for input:', event.data.id)
     }
-
-    const resolver = resolverArray.shift()
-    resolver(new Response(event.data.value, { status: 200 }))
   }
 })
 
-addEventListener('fetch', (event) => {
+self.addEventListener('fetch', (event) => {
   const url = new URL(event.request.url)
 
   if (url.pathname === '/react-py-get-input/') {
     const id = url.searchParams.get('id')
     const prompt = url.searchParams.get('prompt')
 
-    event.waitUntil(
-      (async () => {
-        const clients = await self.clients.matchAll()
-        clients.forEach((client) => {
-          if (client.type === 'window') {
-            client.postMessage({
-              type: 'REACT_PY_AWAITING_INPUT',
-              id,
-              prompt
-            })
-          }
-        })
-      })()
-    )
+    event.respondWith(
+      new Promise((resolve) => {
+        resolvers.set(id, resolve)
 
-    const promise = new Promise((r) =>
-      resolvers.set(id, [...(resolvers.get(id) || []), r])
+        self.clients.matchAll().then((clients) => {
+          clients.forEach((client) => {
+            if (client.type === 'window') {
+              client.postMessage({
+                type: REACT_PY_AWAITING_INPUT,
+                id,
+                prompt
+              })
+            }
+          })
+        })
+      })
     )
-    event.respondWith(promise)
   }
 })
 
-self.addEventListener('error', function (event) {
+self.addEventListener('error', (event) => {
   console.error('ServiceWorker error:', event.error)
 })

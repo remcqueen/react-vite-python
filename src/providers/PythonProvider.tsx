@@ -64,8 +64,9 @@ function PythonProvider(props: PythonProviderProps) {
           console.error(`Registration failed with ${error}`)
         }
 
-        navigator.serviceWorker.onmessage = (event) => {
+        navigator.serviceWorker.addEventListener('message', (event) => {
           if (event.data.type === 'REACT_PY_AWAITING_INPUT') {
+            console.debug('Received REACT_PY_AWAITING_INPUT message:', event.data)
             setWorkerAwaitingInputIds((prev) => new Set(prev).add(event.data.id))
             setWorkerAwaitingInputPrompt((prev) => {
               const next = new Map(prev)
@@ -73,32 +74,38 @@ function PythonProvider(props: PythonProviderProps) {
               return next
             })
             setIsAwaitingInput(true)
-            console.debug('Awaiting input for:', event.data.id)
           }
-        }
+        })
       } else {
         console.error('Service workers not supported')
       }
     }
     registerServiceWorker()
+
+    // Cleanup function
+    return () => {
+      if (navigator.serviceWorker) {
+        navigator.serviceWorker.removeEventListener('message', () => {})
+      }
+    }
   }, [])
 
   const sendInput = useCallback((id: string, value: string): void => {
+    console.debug('Sending input:', id, value)
     if (!workerAwaitingInputIds.has(id)) {
       console.error('Worker not awaiting input')
       return
     }
 
-    if (!swRef.current) {
-      console.error('No service worker registered')
-      return
+    if (navigator.serviceWorker.controller) {
+      navigator.serviceWorker.controller.postMessage({
+        type: 'REACT_PY_INPUT',
+        id,
+        value
+      })
+    } else {
+      console.error('No active service worker')
     }
-
-    swRef.current.postMessage({
-      type: 'REACT_PY_INPUT',
-      id,
-      value
-    })
 
     setWorkerAwaitingInputIds((prev) => {
       const next = new Set(prev)
@@ -111,7 +118,6 @@ function PythonProvider(props: PythonProviderProps) {
       return next
     })
     setIsAwaitingInput(false)
-    console.debug('Input sent for:', id)
   }, [workerAwaitingInputIds])
 
   const contextValue = {

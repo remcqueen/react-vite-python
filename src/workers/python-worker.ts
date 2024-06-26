@@ -41,10 +41,11 @@ import { expose } from 'comlink'
 
 const reactPyModule = {
   getInput: (id: string, prompt: string) => {
+    console.debug('Requesting input:', id, prompt)
     const request = new XMLHttpRequest()
-    // Synchronous request to be intercepted by service worker
     request.open('GET', `/react-py-get-input/?id=${id}&prompt=${prompt}`, false)
     request.send(null)
+    console.debug('Received input response:', request.responseText)
     return request.responseText
   }
 }
@@ -104,7 +105,14 @@ sys.stdin.readline = lambda: react_py.getInput("${id}", __prompt_str__)
     onLoad({ id, version })
   },
   async run(code: string) {
-    await self.pyodide.runPythonAsync(code)
+    console.debug('Running Python code:', code)
+    try {
+      await self.pyodide.runPythonAsync(code)
+      console.debug('Python code execution completed')
+    } catch (error) {
+      console.error('Error running Python code:', error)
+      throw error
+    }
   },
   readFile(name: string) {
     return self.pyodide.FS.readFile(name, { encoding: 'utf8' })
